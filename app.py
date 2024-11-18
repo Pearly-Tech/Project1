@@ -1,85 +1,100 @@
 import streamlit as st
 import random
+import math
 
-def binary_search_game():
-    st.title("Binary Search Guessing Game")
-    
-    mode = st.radio("Select mode:", ("User Guessing", "Machine Guessing"))
+# Function to calculate optimal attempts based on binary search concept
+def calculate_optimal_attempts(lower, upper):
+    return math.ceil(math.log2(upper - lower + 1))
 
-    # Set the range for the random number
-    low = st.number_input("Enter the lower bound:", value=1)
-    high = st.number_input("Enter the upper bound:", value=100)
+# User Guesses the Number
+def user_guesses_game(lower, upper ):
+    st.title("Optimal Number Guessing Game")
+    st.write("Try to guess the number I'm thinking of in as few attempts as possible!")
+    # Validate the range
+    if lower >= upper:
+        st.error("Invalid range! Ensure the upper bound is greater than the lower bound.")
+        return
 
-    if st.button("Start Game"):
-        if mode == "User Guessing":
-            # Generate a random number
-            secret_number = random.randint(low, high)
-            st.session_state.secret_number = secret_number
-            st.session_state.attempts = 0
-            st.session_state.feedback = ""
-            st.session_state.guess_history = []
+    # Step 2: Initialize session state variables
+    if "target_number" not in st.session_state:
+        st.session_state.target_number = random.randint(int(lower), int(upper))
+        st.session_state.attempts = 0
+        st.session_state.current_lower = int(lower)
+        st.session_state.current_upper = int(upper)
+        st.session_state.game_over = False
+
+    # Calculate the optimal number of attempts using binary search
+    max_attempts = math.ceil(math.log2(st.session_state.current_upper - st.session_state.current_lower + 1))
+    st.write(f"Try to guess the number within {max_attempts} attempts!")
+
+    # Step 3: User's guess input
+    user_guess = st.number_input("Enter your guess:",
+        min_value=st.session_state.current_lower,
+        max_value=st.session_state.current_upper
+    )
+
+    # Step 4: Button to submit the guess
+    if st.button("Submit Guess") and not st.session_state.game_over:
+        st.session_state.attempts += 1
+
+        # Check if the guess is correct, too high, or too low
+        if user_guess < st.session_state.target_number:
+            st.warning("Too low! Try a higher number.")
+            st.session_state.current_lower = user_guess + 1  # Narrow down the lower bound
+        elif user_guess > st.session_state.target_number:
+            st.warning("Too high! Try a lower number.")
+            st.session_state.current_upper = user_guess - 1  # Narrow down the upper bound
         else:
-            st.session_state.low = low
-            st.session_state.high = high
-            st.session_state.attempts = 0
-            st.session_state.guess = None
-            st.session_state.feedback = ""
+            st.success(f"Congratulations! You guessed the number {st.session_state.target_number} in {st.session_state.attempts} attempts.")
+            st.balloons()
+            st.session_state.game_over = True
 
-    if mode == "User Guessing":
-        if 'secret_number' in st.session_state:
-            guess = st.number_input("Make a guess:", value=low, min_value=low, max_value=high)
-            if st.button("Submit Guess"):
-                st.session_state.attempts += 1
-                st.session_state.guess_history.append(guess)
-                if guess < st.session_state.secret_number:
-                    st.session_state.feedback = "Too low! Try again."
-                elif guess > st.session_state.secret_number:
-                    st.session_state.feedback = "Too high! Try again."
-                else:
-                    st.session_state.feedback = f"Congratulations! You've guessed the number {st.session_state.secret_number} in {st.session_state.attempts} attempts!"
-            
-            st.write(st.session_state.feedback)
-            st.write(f"Guess History: {st.session_state.guess_history}")
+    # Display a "Play Again" button once the game is over
+    if st.session_state.game_over:
+        if st.button("Play Again"):
+            del st.session_state.target_number
+            del st.session_state.attempts
+            del st.session_state.current_lower
+            del st.session_state.current_upper
+            st.session_state.game_over = False
 
-            if st.session_state.feedback.startswith("Congratulations"):
-                if st.button("Play Again"):
-                    del st.session_state['secret_number']
-                    del st.session_state['attempts']
-                    del st.session_state['feedback']
-                    del st.session_state['guess_history']
-    
-    elif mode == "Machine Guessing":
-        if 'low' in st.session_state and 'high' in st.session_state:
-            if st.session_state.attempts == 0:
-                st.session_state.feedback = "Think of a number between {} and {}!".format(low, high)
+# Machine Guesses the Number
+def machine_guesses_game(lower, upper):
+    if "machine_lower" not in st.session_state:
+        st.session_state.machine_lower = lower
+        st.session_state.machine_upper = upper
+        st.session_state.machine_attempts = 0
+        st.session_state.optimal_attempts = calculate_optimal_attempts(lower, upper)
 
-            if st.session_state.attempts < 10:  # Limit to a number of attempts
-                guess = (st.session_state.low + st.session_state.high) // 2
-                st.session_state.guess = guess
-                st.session_state.attempts += 1
+    st.write("Think of a number and let me guess it!")
+    mid = (st.session_state.machine_lower + st.session_state.machine_upper) // 2
+    st.write(f"My guess is: {mid}")
 
-                st.write(f"Machine guesses: {guess}")
-
-                response = st.radio("Is the guess correct?", ("Correct", "Too Low", "Too High"), key='machine_response')
-
-                if response == "Too Low":
-                    st.session_state.low = guess + 1
-                    st.session_state.feedback = "Machine will try again!"
-                elif response == "Too High":
-                    st.session_state.high = guess - 1
-                    st.session_state.feedback = "Machine will try again!"
-                else:  # Correct
-                    st.session_state.feedback = f"Machine guessed the number {guess} in {st.session_state.attempts} attempts!"
-                    if st.button("Play Again"):
-                        del st.session_state['low']
-                        del st.session_state['high']
-                        del st.session_state['attempts']
-                        del st.session_state['feedback']
-
+    feedback = st.radio("Is my guess correct?", ("Too low", "Too high", "Correct"))
+    if st.button("Submit Feedback"):
+        st.session_state.machine_attempts += 1
+        if feedback == "Too low":
+            st.session_state.machine_lower = mid + 1
+        elif feedback == "Too high":
+            st.session_state.machine_upper = mid - 1
+        else:
+            st.write(f"I guessed your number in {st.session_state.machine_attempts} attempts!")
+            st.balloons()  # Celebration effect for correct guess
+            if st.session_state.machine_attempts <= st.session_state.optimal_attempts:
+                st.write("I guessed it within the optimal number of attempts!")
             else:
-                st.write("Machine couldn't guess your number in 10 attempts. You win!")
+                st.write(f"Optimal attempts were {st.session_state.optimal_attempts}.")
+            st.session_state.machine_lower, st.session_state.machine_upper, st.session_state.machine_attempts = lower, upper, 0  # Reset for next game
 
-        st.write(st.session_state.feedback)
+# Main Streamlit app
+st.title("Guessing Game")
+st.write("Choose a mode:")
 
-if _name_ == "_main_":
-    binary_search_game()
+mode = st.selectbox("Mode", ["User Guesses the Number", "Machine Guesses the Number"])
+lower = st.number_input("Choose the lower bound:", value=1)
+upper = st.number_input("Choose the upper bound:", value=100)
+
+if mode == "User Guesses the Number":
+    user_guesses_game(lower, upper )
+else:
+    machine_guesses_game(lower,upper)
